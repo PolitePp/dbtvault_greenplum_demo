@@ -19,7 +19,7 @@ test-paths:
 target-path: target
 
 vars:
-  load_date: '1992-01-08'
+  load_date: '1992-01-11'
   tpch_size: 10 #1, 10, 100, 1000, 10000
 
 models:
@@ -32,7 +32,7 @@ models:
       tags:
         - 'stage'
       enabled: true
-      materialized: view
+      materialized: table
     raw_vault:
       tags:
         - 'raw_vault'
@@ -49,6 +49,17 @@ models:
       t_links:
         tags:
           - 't_link'
+    vault:
+      tags:
+        - 'vault'
+      bridges:
+        materialized: bridge_incremental
+        tags:
+          - 'bridges'
+      pits:
+        materialized: pit_incremental
+        tags:
+          - 'pits'
 
 # path to compiled .sql files
 target-path: "target"

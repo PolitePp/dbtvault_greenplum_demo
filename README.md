@@ -279,3 +279,130 @@ vars:
   load_date: '1992-01-08' # increment by one day '1992-01-09'
 
 ```
+
+# HOMEWORK
+
+## 1. Prepare CLI command to create Greenplum cluster
+
+Сделал через веб интерфейс
+
+## 2. Load 4-5 days to Data Vault.
+
+Загрузил с 1992-01-08 по 1992-01-11
+Для stage сделал table материализацию, т.к. объекты переиспользуются при создании дата волта
+
+## 3. Prepare Point-in-Time & Bridge Tables
+
+Create models that combine Hubs + Satellites, Hubs + Links.
+Choose how to materialize it.
+
+Как я должен быть сделать pit и bridge, если они появились только в 0.7.6 версии? 
+Прикрепил модели, но они не работают. Попробовал реализовать pit и bridge макросы, что, конечно же, не получилось. 
+
+**(?) Now run a couple of queries on top of your models:**
+
+```sql
+-- Q1
+SELECT
+    l_returnflag,
+    l_linestatus,
+    sum(l_quantity) as sum_qty,
+    sum(l_extendedprice) as sum_base_price,
+    sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
+    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,
+    avg(l_quantity) as avg_qty,
+    avg(l_extendedprice) as avg_price,
+    avg(l_discount) as avg_disc,
+    count(*) as count_order
+FROM
+    lineitem
+WHERE
+    l_shipdate <= date '1998-12-01' - interval '90' day
+GROUP BY
+    l_returnflag,
+    l_linestatus
+ORDER BY
+    l_returnflag,
+    l_linestatus;
+```
+
+| l\_returnflag | l\_linestatus | sum\_qty | sum\_base\_price | sum\_disc\_price | sum\_charge | avg\_qty | avg\_price | avg\_disc | count\_order |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| A | F | 377518399 | 566065727797.25 | 537759104278.0656 | 559276670892.116819 | 25.5009751030070973 | 38237.151008958546 | 0.05000657454024320463 | 14804077 |
+| N | F | 9851614 | 14767438399.17 | 14028805792.2114 | 14590490998.366737 | 25.5224483028409474 | 38257.81066008114 | 0.0499733677376566718 | 385998 |
+| N | O | 743124873 | 1114302286901.88 | 1058580922144.9638 | 1100937000170.591854 | 25.4980758706893147 | 38233.90292348181 | 0.05000081182113130603 | 29144351 |
+| R | F | 377732830 | 566431054976 | 538110922664.7677 | 559634780885.086257 | 25.5083847896801383 | 38251.219273559761 | 0.04999679231408742045 | 14808183 |
+
+
+```sql
+-- Q2
+SELECT
+    l_orderkey,
+    sum(l_extendedprice * (1 - l_discount)) as revenue,
+    o_orderdate,
+    o_shippriority
+FROM
+    customer,
+    orders,
+    lineitem
+WHERE
+    c_mktsegment = 'BUILDING'
+    AND c_custkey = o_custkey
+    AND l_orderkey = o_orderkey
+    AND o_orderdate < date '1995-03-15'
+    AND l_shipdate > date '1995-03-15'
+GROUP BY
+    l_orderkey,
+    o_orderdate,
+    o_shippriority
+ORDER BY
+    revenue desc,
+    o_orderdate
+LIMIT 20;
+```
+
+| l\_orderkey | revenue | o\_orderdate | o\_shippriority |
+| :--- | :--- | :--- | :--- |
+| 4791171 | 440715.2185 | 1995-02-23 | 0 |
+| 46678469 | 439855.325 | 1995-01-27 | 0 |
+| 23906758 | 432728.5737 | 1995-03-14 | 0 |
+| 23861382 | 428739.1368 | 1995-03-09 | 0 |
+| 59393639 | 426036.0662 | 1995-02-12 | 0 |
+| 3355202 | 425100.6657 | 1995-03-04 | 0 |
+| 9806272 | 425088.0568 | 1995-03-13 | 0 |
+| 22810436 | 423231.969 | 1995-01-02 | 0 |
+| 16384100 | 421478.7294 | 1995-03-02 | 0 |
+| 52974151 | 415367.1195 | 1995-02-05 | 0 |
+| 3778628 | 411836.2827 | 1995-02-25 | 0 |
+| 21353479 | 410325.6287 | 1995-03-04 | 0 |
+| 20524164 | 409472.0867 | 1995-03-04 | 0 |
+| 33059171 | 409156.4696 | 1995-02-16 | 0 |
+| 8207586 | 407736.967 | 1995-03-04 | 0 |
+| 9365575 | 406258.5739 | 1995-03-12 | 0 |
+| 9874305 | 404121.8245 | 1995-01-19 | 0 |
+| 4860004 | 401782.3025 | 1995-02-22 | 0 |
+| 45512673 | 400541.9454 | 1995-02-08 | 0 |
+| 53144198 | 399667.5504 | 1995-02-17 | 0 |
+
+
+```sql
+-- Q3
+
+SELECT
+    100.00 * sum(case
+        when p_type like 'PROMO%'
+            then l_extendedprice * (1 - l_discount)
+        else 0
+    end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
+FROM
+    lineitem,
+    part
+WHERE
+    l_partkey = p_partkey
+    AND l_shipdate >= date '1995-09-01'
+    AND l_shipdate < date '1995-09-01' + interval '1' month;
+```
+
+| promo\_revenue |
+| :--- |
+| 16.6475949416150953 |
